@@ -3,6 +3,7 @@ import os.path as op
 import configparser
 from operator import itemgetter
 import logging
+from datetime import datetime
 import time
 import csv
 
@@ -33,10 +34,9 @@ def rename_convert(input_base, output_dir, video_options, audio_options):
 			# Check if acceptable file extension:
 			input_path = op.join(input_base, input_dir, input_file)
 			if input_file.lower().endswith(tuple(acceptable_input_formats)):
-				# output_file = f"{input_dir}_{counter}.mp4"
-
-				input_basename, _ = op.splitext(input_file)
-				output_file = "{}_{}.mp4".format(input_dir, input_basename)
+				output_file = f"{input_dir}_{counter:04d}.mp4"
+				# input_basename, _ = op.splitext(input_file)
+				# output_file = "{}_{}.mp4".format(input_dir, input_basename)
 				output_path = op.join(output_dir, output_file)
 				logging.info("Converting {} to {}".format(input_file, output_path))
 				# os.rename(input_path, output_path)
@@ -57,8 +57,11 @@ def rename_convert(input_base, output_dir, video_options, audio_options):
 		old2new_writer = csv.writer(csv_file, delimiter=',', quotechar='"')
 		old2new_writer.writerows([[a[0], a[1]] for a in old2new])
 
+	now = datetime.now()
+
 	with open('maxlog.csv', mode='a') as csv_file:
 		old2new_writer = csv.writer(csv_file, delimiter=',', quotechar='"')
+		old2new_writer.writerow([f"Project: {input_base} at {now}"])
 		old2new_writer.writerows([[a[0], a[2]] for a in old2new])
 
 def convert_vid(input_path, output_path, video_options, audio_options):
@@ -69,7 +72,7 @@ def convert_vid(input_path, output_path, video_options, audio_options):
 
 	fm_str = "ffmpeg -y -i {}".format(shlex.quote(input_path))
 
-	fm_str += " -vcodec libx264 -crf 27 -preset veryfast"
+	fm_str += " -vcodec libx264 -crf 27 -preset veryfast -acodec copy"
 
 	fm_str += " -r {}".format(video_options['framerate'])
 
@@ -82,8 +85,8 @@ def convert_vid(input_path, output_path, video_options, audio_options):
 	elif video_options['scale_type'] == 'constrain_preserve_original':
 		fm_str += f' -vf "scale=\'2*floor(min({w},min(iw,round({h}*iw/ih)))/2)\':-2"'
 
-	fm_str += " -ar {}".format(audio_options['sample_rate'])
-	fm_str += " -ac {}".format(audio_options['channels'])
+	# fm_str += " -ar {}".format(audio_options['sample_rate'])
+	# fm_str += " -ac {}".format(audio_options['channels'])
 	fm_str += " {}".format(shlex.quote(output_path))
 
 	logging.debug(fm_str)
@@ -121,7 +124,9 @@ def sync_aaf(input_dir, output_dir, aaf_file, options, audio_options):
 
 			fm_str = "ffmpeg -y -i {}".format(shlex.quote(input_path))
 			fm_str += " -ss {}".format(match[0][1]/int(audio_options['sample_rate']))
-			fm_str += " -c copy"
+			fm_str += " -vcodec copy"
+			fm_str += " -ar {}".format(audio_options['sample_rate'])
+			fm_str += " -ac {}".format(audio_options['channels'])
 			fm_str += " {}".format(shlex.quote(output_path))
 
 			logging.debug(fm_str)
@@ -164,7 +169,7 @@ if __name__ == "__main__":
 	console = logging.StreamHandler()
 	console.setLevel(logging.DEBUG)
 	# set a format which is simpler for console use
-	formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+	formatter = logging.Formatter('%(asctime)s - %(name)-12s: %(levelname)-8s %(message)s')
 	console.setFormatter(formatter)
 	# add the handler to the root logger
 	logging.getLogger('').addHandler(console)
@@ -190,11 +195,13 @@ if __name__ == "__main__":
 				op.join(basepath, parser['paths']['convert_dir']), \
 				parser['video'], \
 				parser['audio'])
+			parser['enable']['convert_inputs'] = "false"
 
 		if parser['enable'].getboolean('split_audio'):
 			split_audio(op.join(basepath, parser['paths']['convert_dir']), \
 				op.join(basepath, parser['paths']['audio_output_dir']), \
 				parser['audio'])
+			parser['enable']['split_audio'] = "false"
 
 		if parser['enable'].getboolean('sync_aaf'):
 			sync_aaf(op.join(basepath, parser['paths']['convert_dir']), \
@@ -202,3 +209,7 @@ if __name__ == "__main__":
 				op.join(basepath, parser['paths']['aaf_file']), \
 				parser['video'], \
 				parser['audio'])
+			parser['enable']['sync_aaf'] = "false"
+
+		with open(op.join(basepath, "config.ini"), "w") as configfile:
+			parser.write(configfile)
