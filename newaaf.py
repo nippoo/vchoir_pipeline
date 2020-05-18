@@ -28,7 +28,6 @@ def list_headers_lengths(aaf_file):
     global curr_header_len
     global curr_file_len
 
-    print("Opening AAF file: {}".format(aaf_file))
     f = aaf2.open(aaf_file)
 
     lengths = []
@@ -47,6 +46,8 @@ def list_headers_lengths(aaf_file):
                                 # print(type(s))
                     if curr_track_name != "Timecode":
                         lengths.append([curr_track_name, curr_header_len, curr_file_len])
+                        curr_header_len = 0
+                        curr_file_len = 0
 
 
     return lengths
