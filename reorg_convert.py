@@ -16,13 +16,17 @@ source_dirs = "Dropbox/15. VIDEO CONVERTER/"
 # source_dirs = "actualtest_data/"
 acceptable_input_formats = ['aa', 'aac', 'ac3', 'acm', 'adf', 'adp', 'dtk', 'ads', 'ss2', 'adx', 'aea', 'afc', 'aix', 'al', 'ape', 'apl', 'mac', 'aqt', 'ast', 'avi', 'avs', 'avr', 'bfstm', 'bcstm', 'bin', 'bit', 'bmv', 'brstm', 'cdg', 'cdxl', 'xl', '302', 'daud', 'str', 'dss', 'dts', 'dtshd', 'dv', 'dif', 'cdata', 'eac3', 'paf', 'fap', 'flm', 'flac', 'flv', 'fsb', 'g722', '722', 'tco', 'rco', 'g723_1', 'g729', 'genh', 'gsm', 'h261', 'h26l', 'h264', '264', 'avc', 'hevc', 'h265', '265', 'idf', 'cgi', 'sf', 'ircam', 'ivr', '669', 'amf', 'ams', 'dbm', 'digi', 'dmf', 'dsm', 'far', 'gdm', 'imf', 'it', 'j2b', 'm15', 'mdl', 'med', 'mmcmp', 'mms', 'mo3', 'mod', 'mptm', 'mt2', 'mtm', 'nst', 'okt', 'plm', 'ppm', 'psm', 'pt36', 'ptm', 's3m', 'sfx', 'sfx2', 'stk', 'stm', 'ult', 'umx', 'wow', 'xm', 'xpk', 'flv', 'lvf', 'm4v', 'mkv', 'mk3d', 'mka', 'mks', 'mjpg', 'mjpeg', 'mpo', 'j2k', 'mlp', 'mov', 'mp4', 'm4a', '3gp', '3g2', 'mj2', 'mp2', 'mp3', 'm2a', 'mpa', 'mpc', 'mjpg', 'txt', 'mpl2', 'sub', 'msf', 'mtaf', 'ul', 'musx', 'mvi', 'mxg', 'v', 'nist', 'sph', 'nut', 'ogg', 'oma', 'omg', 'aa3', 'pjs', 'pvf', 'yuv', 'cif', 'qcif', 'rgb', 'rt', 'rsd', 'rsd', 'rso', 'sw', 'sb', 'smi', 'sami', 'sbg', 'scc', 'sdr2', 'sds', 'sdx', 'shn', 'vb', 'son', 'sln', 'mjpg', 'stl', 'sub', 'sub', 'sup', 'svag', 'tak', 'thd', 'tta', 'ans', 'art', 'asc', 'diz', 'ice', 'nfo', 'txt', 'vt', 'uw', 'ub', 'v210', 'yuv10', 'vag', 'vc1', 'viv', 'idx', 'vpk', 'txt', 'vqf', 'vql', 'vqe', 'vtt', 'wsd', 'xmv', 'xvag', 'yop', 'y4m']
 
-# def generate_blank(secs):
-# 	(
-# 		ffmpeg
-# 		.input("anullsrc")
-# 		.filter('lavfi', color='black', s="1920x1080", r="24000/1001")
-# 		.output("test.mp4", ar='48000', ac='1', t='20')
-# 	)
+def generate_blank(input_path, secs, video_options, audio_options):
+
+	fm_str = "ffmpeg -y -i {}".format(shlex.quote(input_path))
+	fm_str += f' -vf trim=0:{secs},geq=0:128:128 -af atrim=0:{secs},volume=0 '
+	fm_str += " -r {} ".format(video_options['framerate'])
+	fm_str += " -ar {}".format(audio_options['sample_rate'])
+	fm_str += " -ac {}".format(audio_options['channels'])
+	fm_str += ' TEMPBLANK.mp4'
+
+	logging.debug(fm_str)
+	return subprocess.call(fm_str, shell=True)
 
 def rename_convert(input_base, output_dir, video_options, audio_options):
 # Renames, concatenates files into one folder, prepending prefix
@@ -103,15 +107,14 @@ def extract_audio(input_path, output_path, audio_options):
 
 	subprocess.call(fm_str, shell=True)
 
-def sync_aaf(input_dir, output_dir, aaf_file, options, audio_options):
+def sync_aaf(input_dir, output_dir, aaf_file, video_options, audio_options, black_leaders):
 	# first, try to open AAF and make list
 
 	logging.info("Opening AAF file: {}".format(aaf_file))
 
 	headers_lengths = (newaaf.list_headers_lengths(aaf_file))
 	# find the longest header, subtract all other headers from that:
-	trim_samples = [[a[0], (max(headers_lengths, key=itemgetter(1)))[1] - a[1]] for a in headers_lengths]
-
+	trim_samples = [[a[0], (max(headers_lengths, key=itemgetter(1)))[1] - a[1], a[1]] for a in headers_lengths]
 	for input_file in files(input_dir):
 		print(input_file)
 		input_path = op.join(input_dir, input_file)
@@ -119,15 +122,26 @@ def sync_aaf(input_dir, output_dir, aaf_file, options, audio_options):
 		# check if input basename is in the list of header lengths:
 		match = [item for item in trim_samples if item[0] == input_basename]
 		if match:
-			print("yay match! {}".format(match))
-			output_path = op.join(output_dir, "{}.mp4".format(input_basename))
+			if black_leaders:
+				generate_blank(input_path, match[0][2]/int(audio_options['sample_rate']), video_options, audio_options)
+				final_output_path = op.join(output_dir, "{}.mp4".format(input_basename))
+				output_path = "TEMPCONTENT.mp4"
+
 
 			fm_str = "ffmpeg -y -i {}".format(shlex.quote(input_path))
-			fm_str += " -ss {}".format(match[0][1]/int(audio_options['sample_rate']))
+			if not black_leaders:
+				fm_str += " -ss {}".format(match[0][1]/int(audio_options['sample_rate']))
 			fm_str += " -vcodec copy"
 			fm_str += " -ar {}".format(audio_options['sample_rate'])
 			fm_str += " -ac {}".format(audio_options['channels'])
 			fm_str += " {}".format(shlex.quote(output_path))
+
+			print(fm_str)
+			logging.debug(fm_str)
+			subprocess.call(fm_str, shell=True)
+
+			if black_leaders:
+				fm_str = "ffmpeg -y -f concat -i TEMPCONCAT.txt -c copy {}".format(shlex.quote(final_output_path))
 
 			logging.debug(fm_str)
 			subprocess.call(fm_str, shell=True)
@@ -208,7 +222,8 @@ if __name__ == "__main__":
 				op.join(basepath, parser['paths']['sync_output_dir']), \
 				op.join(basepath, parser['paths']['aaf_file']), \
 				parser['video'], \
-				parser['audio'])
+				parser['audio'], \
+				parser['video'].getboolean('black_leaders'))
 			parser['enable']['sync_aaf'] = "false"
 
 		with open(op.join(basepath, "config.ini"), "w") as configfile:
