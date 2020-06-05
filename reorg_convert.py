@@ -54,7 +54,7 @@ def rename_convert(input_base, output_dir, video_options, audio_options):
 					else:
 						old2new.append([input_file, output_file, (time.time()-start)])
 						logging.info(f"Converted {input_file}!")
-						counter += 1
+				counter += 1
 
 
 	with open(op.join(input_base, 'old2new.csv'), mode='a') as csv_file:
@@ -126,6 +126,8 @@ def sync_aaf(input_dir, output_dir, aaf_file, video_options, audio_options, blac
 				generate_blank(input_path, match[0][2]/int(audio_options['sample_rate']), video_options, audio_options)
 				final_output_path = op.join(output_dir, "{}.mp4".format(input_basename))
 				output_path = "TEMPCONTENT.mp4"
+			else:
+				output_path = op.join(output_dir, "{}.mp4".format(input_basename))
 
 
 			fm_str = "ffmpeg -y -i {}".format(shlex.quote(input_path))
